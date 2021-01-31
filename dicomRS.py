@@ -1,53 +1,90 @@
 import pydicom as dicom
 import os
-import numpy
-from matplotlib import pyplot, cm
+import numpy as np
+from matplotlib import pyplot as plt, cm
 
-PathDicom = "data/test/"
-lstFilesDCM = []  # create an empty list
+
+def crop_1D(img, cropx):
+    x = img.shape
+    # print(x[0])
+    startx = int(x[0]/2) - int(cropx/2)
+    # print(startx)
+    return img[startx:startx+cropx]
+
+
+def crop_3D(img, cropx, cropy):
+    y, x, z = img.shape
+    startx = int(x/2) - int(cropx/2)
+    starty = int(y/2) - int(cropy/2)
+    #startz = int(z/2) - cropz/2
+    return img[starty:starty+cropy, :, startx:startx+cropx]
+
+
+PathDicom = "data/"
+refFile = "RS6.dcm"
+testedFile = "RS8.dcm"
+# lstFilesDCM = []  # create an empty list
 for dirName, subdirList, fileList in os.walk(PathDicom):
-    for filename in fileList:
-        if ".dcm" in filename.lower():  # check whether the file's DICOM
-            lstFilesDCM.append(os.path.join(dirName,filename))
+    for d in subdirList:
+        rFile = os.path.join(dirName+d, refFile)
+        tFile = os.path.join(dirName+d, testedFile)
+        print(rFile, tFile)
+        # for filename in fileList:
+        #    if ".dcm" in filename.lower():  # check whether the file's DICOM
+        #        lstFilesDCM.append(os.path.join(dirName,filename))
 
-# Get ref file
-RefDs = dicom.read_file(lstFilesDCM[0])
-# Load dimensions based on the number of rows, columns, and slices (along the Z axis)
-ds = RefDs.pixel_array  
+        refDs = dicom.read_file(rFile)
+        testedDs = dicom.read_file(tFile)
+        ds = refDs.pixel_array
 
-ConstPixelDims = ds.shape #(int(RefDs.Lines),int(RefDs.Rows), int(RefDs.Columns))
-print(ConstPixelDims)
+        # (int(refDs.Lines),int(refDs.Rows), int(refDs.Columns))
+        ConstPixelDims = ds.shape
+        print(ConstPixelDims)
 
-# Load spacing values (in mm)
-ConstPixelSpacing = (float(RefDs.PixelSpacing[0]), float(RefDs.PixelSpacing[1]), float(RefDs.SliceThickness))
-#print(ConstPixelSpacing)
+        # Load spacing values (in mm)
+        ConstPixelSpacing = (float(refDs.PixelSpacing[0]), float(
+            refDs.PixelSpacing[1]), float(refDs.SliceThickness))
+        # print(ConstPixelSpacing)
 
-x = numpy.arange(0.0, (ConstPixelDims[0]+1)*ConstPixelSpacing[0], ConstPixelSpacing[0])
-y = numpy.arange(0.0, (ConstPixelDims[1]+1)*ConstPixelSpacing[1], ConstPixelSpacing[1])
-z = numpy.arange(0.0, (ConstPixelDims[2]+1)*ConstPixelSpacing[2], ConstPixelSpacing[2])
-
-print(len(x),len(y),len(z))
-print(x)
-# The array is sized based on 'ConstPixelDims'
-ArrayDicom = numpy.zeros(ConstPixelDims, dtype=RefDs.pixel_array.dtype)
-print(numpy.shape(RefDs.pixel_array))
-print(numpy.shape(ArrayDicom))
-#print(len(ArrayDicom[0]),len(ArrayDicom[1]),len(ArrayDicom[2]))
-ArrayDicom[:,:,:] = RefDs.pixel_array 
-#print(ArrayDicom)
-# loop through all the DICOM files
-'''for filenameDCM in lstFilesDCM:
-    # read the file
-    ds = dicom.read_file(filenameDCM)
-    print(len(ds.pixel_array[0]),len(ds.pixel_array[1]),len(ds.pixel_array[2]))
-    # store the raw image data
-    #print(ds.pixel_array)
-    ArrayDicom[:, :,lstFilesDCM.index(filenameDCM)] = ds.pixel_array  
-'''
-pyplot.figure(dpi=300)
-pyplot.axes().set_aspect('equal', 'datalim')
-pyplot.set_cmap(pyplot.viridis())
-pyplot.pcolormesh(y, z, numpy.flipud(ArrayDicom[80, :, :]))
-pyplot.pcolormesh(x, z, numpy.flipud(ArrayDicom[:, 80, :]))
-print(ArrayDicom[:, :, 80])
-pyplot.show()
+        x = np.arange(
+            0.0, (ConstPixelDims[0]+1)*ConstPixelSpacing[0], ConstPixelSpacing[0])
+        y = np.arange(
+            0.0, (ConstPixelDims[1]+1)*ConstPixelSpacing[1], ConstPixelSpacing[1])
+        z = np.arange(
+            0.0, (ConstPixelDims[2]+1)*ConstPixelSpacing[2], ConstPixelSpacing[2])
+        #x = x[int(len(x)/2)-50:int(len(x)/2)+50]
+        cropped = 80
+        lx = crop_1D(x, cropped)
+        ly = crop_1D(y, cropped)
+        
+        # print(len(x),len(y),len(z))
+        # print(lx)
+        # The array is sized based on 'ConstPixelDims'
+        refArray = np.zeros(ConstPixelDims, dtype=refDs.pixel_array.dtype)
+        testedArray = np.zeros(ConstPixelDims, dtype=testedDs.pixel_array.dtype)
+        # print(np.shape(refDs.pixel_array))
+        # print(np.shape(refArray))
+        # print(len(refArray[0]),len(refArray[1]),len(refArray[2]))
+        refArray[:, :, :] = refDs.pixel_array
+        testedArray[:, :, :] = testedDs.pixel_array
+        errorLocal = 100*(refArray-testedArray)/refArray
+        errorGlobal = 100*(refArray-testedArray)/np.max(refArray)
+        lrefArray = crop_3D(refArray,cropped,cropped)
+        ltestedArray = crop_3D(testedArray,cropped,cropped)
+        MaxIndices = np.where(refArray == np.amax(refArray))
+        print(MaxIndices)
+        plt.figure(dpi=300)
+        #plt.axes().set_aspect('equal', 'datalim')
+        plt.set_cmap(plt.jet())
+        plt.pcolormesh(y, z, refArray[80, :, :])
+        plt.pcolormesh(y, x, refArray[:, :, 80])
+        plt.pcolormesh(y, x, refArray[:, 80, :])
+        plt.pcolormesh(y, x, refArray[:, MaxIndices[2][0], :])
+        plt.pcolormesh(y, x, errorGlobal[:, MaxIndices[2][0], :])
+        #plt.pcolormesh(ly, lx,lrefArray[:, MaxIndices[2][0], :])
+        #print(refArray[:, :, 80])
+        rateG=100.*np.size(np.where(errorGlobal <=1))/3./(ConstPixelDims[0]*ConstPixelDims[1]*ConstPixelDims[2]-np.size(np.where(np.isnan(errorGlobal)))/3.)
+        print(rateG)
+        rateL=100.*np.size(np.where(errorLocal <=100))/3./(ConstPixelDims[0]*ConstPixelDims[1]*ConstPixelDims[2]-np.size(np.where(np.isnan(errorLocal)))/3.)
+        print(rateL)
+        #plt.show()
