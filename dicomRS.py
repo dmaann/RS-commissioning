@@ -2,7 +2,34 @@ import pydicom as dicom
 import os
 import numpy as np
 from matplotlib import pyplot as plt, cm
+import math
 
+
+def computeArrayRate(errG, dims, dir):
+    criteria = np.arange(0.5, 3.5, 0.5)
+    rateGlobal = np.zeros(len(criteria), dtype=float)
+    print(np.size(criteria))
+    for i in range(0, np.size(criteria)):
+        rateGlobal[i] = 100.*np.size(np.where(np.abs(errG) <= criteria[i]))/3./(
+            dims[0]*dims[1]*dims[2]-np.size(np.where(np.isnan(errG)))/3.)
+        print(np.size(np.where(np.isnan(errG)))/3.)
+    print(np.size(np.where(np.isnan(errG)))/3.)
+    #print(list(rateGlobal))
+    #print(list(criteria))
+    fig = plt.figure()
+    # fig.set_size_inches(4.,3.)
+    low = min(rateGlobal)
+    high = max(rateGlobal)
+    plt.ylim([math.ceil(low-0.5*(high-low)), math.ceil(high+1)])
+    # plt.ylim([low,high])
+
+    plt.bar(list(criteria), list(rateGlobal), align='center',
+            width=0.3, color='yellow', edgecolor='red')
+    plt.xlabel('Critère: erreur en %')
+    plt.ylabel('Taux de passage en %')
+    plt.title('Changement de version Raystation: spots à ' + dir)
+    fig.savefig('fig/' + dir + '_Rate_histo.pdf',
+                facecolor='w', edgecolor='w', format='pdf')
 
 def crop_1D(img, cropx):
     x = img.shape
@@ -16,8 +43,68 @@ def crop_3D(img, cropx, cropy):
     y, x, z = img.shape
     startx = int(x/2) - int(cropx/2)
     starty = int(y/2) - int(cropy/2)
-    #startz = int(z/2) - cropz/2
+    # startz = int(z/2) - cropz/2
     return img[starty:starty+cropy, :, startx:startx+cropx]
+
+def crop_2D_depth(img, cropy):
+    y, z = img.shape
+    starty = int(y/2) - int(cropy/2)
+    return img[starty:starty+cropy, 0:115]
+
+
+def draw2DMapDoseTransverse(dim1,dim2,array, dir, namefig,version):
+    fig = plt.figure()
+    im = plt.pcolormesh(dim1, dim2, array)
+    plt.title('Dose à la profondeur du maximum : '+version)
+    cbar = plt.colorbar(im)
+    cbar.set_label('Dose en cGy')
+    #plt.axes().set_aspect('equal', 'datalim')
+    plt.xlabel('Y en mm')
+    plt.ylabel('X en mm')
+    plt.set_cmap(plt.get_cmap('jet'))
+    fig.savefig('fig/' + dir + '_DoseMapTransverse' + namefig+version+'.pdf',
+                facecolor='w', edgecolor='w', format='pdf')
+
+def draw2DMapDoseDepth(dim1,dim2,array, cropped, dir, namefig,version):
+    fig = plt.figure()
+    croppedArray = crop_2D_depth(array,cropped)
+    im = plt.pcolormesh(dim1, dim2, croppedArray)
+    plt.title('Dose en fonctionde la profondeur: '+version)
+    cbar = plt.colorbar(im)
+    cbar.set_label('Dose en cGy')
+    #plt.axes().set_aspect('equal', 'datalim')
+    plt.xlabel('Z en mm')
+    plt.ylabel('X en mm')
+    plt.set_cmap(plt.get_cmap('jet'))
+    fig.savefig('fig/' + dir + '_DoseMapDepth' + namefig+version+'.pdf',
+                facecolor='w', edgecolor='w', format='pdf')
+
+def draw2DMapErrorTransverse(dim1,dim2,array, dir, namefig):
+    fig = plt.figure()
+    im = plt.pcolormesh(dim1, dim2, array)
+    plt.title('Erreur de dose à la profondeur du maximum')
+    cbar = plt.colorbar(im)
+    cbar.set_label('Erreur en %')
+    #plt.axes().set_aspect('equal', 'datalim')
+    plt.xlabel('Y en mm')
+    plt.ylabel('X en mm')
+    plt.set_cmap(plt.get_cmap('RdYlBu_r'))
+    fig.savefig('fig/' + dir + '_ErrorMapTransverse' + namefig+'.pdf',
+                facecolor='w', edgecolor='w', format='pdf')
+
+def draw2DMapErrorDepth(dim1,dim2,array, cropped, dir, namefig):
+    fig = plt.figure()
+    croppedArray = crop_2D_depth(array,cropped)
+    im = plt.pcolormesh(dim1, dim2, croppedArray)
+    plt.title('Erreur de dose à la profondeur du maximum')
+    cbar = plt.colorbar(im)
+    cbar.set_label('Erreur en %')
+    #plt.axes().set_aspect('equal', 'datalim')
+    plt.xlabel('Y en mm')
+    plt.ylabel('X en mm')
+    plt.set_cmap(plt.get_cmap('RdYlBu_r'))
+    fig.savefig('fig/' + dir + '_ErrorMapTransverse' + namefig+'.pdf',
+                facecolor='w', edgecolor='w', format='pdf')
 
 
 PathDicom = "data/"
@@ -32,15 +119,12 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         # for filename in fileList:
         #    if ".dcm" in filename.lower():  # check whether the file's DICOM
         #        lstFilesDCM.append(os.path.join(dirName,filename))
-
         refDs = dicom.read_file(rFile)
         testedDs = dicom.read_file(tFile)
         ds = refDs.pixel_array
-
-        # (int(refDs.Lines),int(refDs.Rows), int(refDs.Columns))
         ConstPixelDims = ds.shape
-        print(ConstPixelDims)
 
+        # print(ConstPixelDims)
         # Load spacing values (in mm)
         ConstPixelSpacing = (float(refDs.PixelSpacing[0]), float(
             refDs.PixelSpacing[1]), float(refDs.SliceThickness))
@@ -52,39 +136,41 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
             0.0, (ConstPixelDims[1]+1)*ConstPixelSpacing[1], ConstPixelSpacing[1])
         z = np.arange(
             0.0, (ConstPixelDims[2]+1)*ConstPixelSpacing[2], ConstPixelSpacing[2])
-        #x = x[int(len(x)/2)-50:int(len(x)/2)+50]
-        cropped = 80
+
+        cropped = 100
         lx = crop_1D(x, cropped)
         ly = crop_1D(y, cropped)
-        
+        lz = z[0:115]
         # print(len(x),len(y),len(z))
         # print(lx)
+
         # The array is sized based on 'ConstPixelDims'
         refArray = np.zeros(ConstPixelDims, dtype=refDs.pixel_array.dtype)
-        testedArray = np.zeros(ConstPixelDims, dtype=testedDs.pixel_array.dtype)
+        testedArray = np.zeros(
+            ConstPixelDims, dtype=testedDs.pixel_array.dtype)
         # print(np.shape(refDs.pixel_array))
         # print(np.shape(refArray))
         # print(len(refArray[0]),len(refArray[1]),len(refArray[2]))
         refArray[:, :, :] = refDs.pixel_array
         testedArray[:, :, :] = testedDs.pixel_array
-        errorLocal = 100*(refArray-testedArray)/refArray
+        
         errorGlobal = 100*(refArray-testedArray)/np.max(refArray)
-        lrefArray = crop_3D(refArray,cropped,cropped)
-        ltestedArray = crop_3D(testedArray,cropped,cropped)
+        errorGlobal[refArray == 0.] = np.nan # where it's 0 data do not considered for statistics 
+        computeArrayRate(errorGlobal, ConstPixelDims, d)
+        print(np.size(np.where(refArray == 0.))/3.)
+        print(len(refArray))
+        lrefArray = crop_3D(refArray, cropped, cropped)
+        ltestedArray = crop_3D(testedArray, cropped, cropped)
+        lerrorGlobal = crop_3D(errorGlobal, cropped, cropped)
+
         MaxIndices = np.where(refArray == np.amax(refArray))
+        ref = 'RS8'
+        tested = 'RS10'
         print(MaxIndices)
-        plt.figure(dpi=300)
-        #plt.axes().set_aspect('equal', 'datalim')
-        plt.set_cmap(plt.jet())
-        plt.pcolormesh(y, z, refArray[80, :, :])
-        plt.pcolormesh(y, x, refArray[:, :, 80])
-        plt.pcolormesh(y, x, refArray[:, 80, :])
-        plt.pcolormesh(y, x, refArray[:, MaxIndices[2][0], :])
-        plt.pcolormesh(y, x, errorGlobal[:, MaxIndices[2][0], :])
-        #plt.pcolormesh(ly, lx,lrefArray[:, MaxIndices[2][0], :])
-        #print(refArray[:, :, 80])
-        rateG=100.*np.size(np.where(errorGlobal <=1))/3./(ConstPixelDims[0]*ConstPixelDims[1]*ConstPixelDims[2]-np.size(np.where(np.isnan(errorGlobal)))/3.)
-        print(rateG)
-        rateL=100.*np.size(np.where(errorLocal <=100))/3./(ConstPixelDims[0]*ConstPixelDims[1]*ConstPixelDims[2]-np.size(np.where(np.isnan(errorLocal)))/3.)
-        print(rateL)
-        #plt.show()
+        draw2DMapDoseTransverse(ly, lx, lrefArray[:, MaxIndices[2][0], :],d, 'AtMaxDepth',ref)
+        draw2DMapDoseTransverse(ly, lx, ltestedArray[:, MaxIndices[2][0], :],d, 'AtMaxDepth',tested)
+        draw2DMapErrorTransverse(ly, lx, lerrorGlobal[:, MaxIndices[2][0], :],d, 'AtMaxDepth')
+
+        draw2DMapDoseDepth(lz, lx, refArray[:, :, MaxIndices[0][0]], cropped, d, 'AtMaxDepth',ref)
+        draw2DMapDoseDepth(lz, lx, testedArray[:, :, MaxIndices[0][0]], cropped, d, 'AtMaxDepth',tested)
+        draw2DMapErrorDepth(lz, lx, errorGlobal[:,:,MaxIndices[0][0]],cropped,d, 'AtMaxDepth')
