@@ -8,12 +8,12 @@ import math
 def computeArrayRate(errG, dims, dir):
     criteria = np.arange(0.5, 3.5, 0.5)
     rateGlobal = np.zeros(len(criteria), dtype=float)
-    print(np.size(criteria))
+    #print(np.size(criteria))
     for i in range(0, np.size(criteria)):
         rateGlobal[i] = 100.*np.size(np.where(np.abs(errG) <= criteria[i]))/3./(
             dims[0]*dims[1]*dims[2]-np.size(np.where(np.isnan(errG)))/3.)
-        print(np.size(np.where(np.isnan(errG)))/3.)
-    print(np.size(np.where(np.isnan(errG)))/3.)
+        #print(np.size(np.where(np.isnan(errG)))/3.)
+    #print(np.size(np.where(np.isnan(errG)))/3.)
     #print(list(rateGlobal))
     #print(list(criteria))
     fig = plt.figure()
@@ -21,7 +21,7 @@ def computeArrayRate(errG, dims, dir):
     low = min(rateGlobal)
     high = max(rateGlobal)
     plt.ylim([math.ceil(low-0.5*(high-low)), math.ceil(high+1)])
-    # plt.ylim([low,high])
+    plt.ylim([0,102])
 
     plt.bar(list(criteria), list(rateGlobal), align='center',
             width=0.3, color='yellow', edgecolor='red')
@@ -57,7 +57,7 @@ def draw2DMapDoseTransverse(dim1,dim2,array, dir, namefig,version):
     im = plt.pcolormesh(dim1, dim2, array)
     plt.title('Dose à la profondeur du maximum : '+version)
     cbar = plt.colorbar(im)
-    cbar.set_label('Dose en cGy')
+    cbar.set_label('Dose en Gy')
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Y en mm')
     plt.ylabel('X en mm')
@@ -71,7 +71,7 @@ def draw2DMapDoseDepth(dim1,dim2,array, cropped, dir, namefig,version):
     im = plt.pcolormesh(dim1, dim2, croppedArray)
     plt.title('Dose en fonctionde la profondeur: '+version)
     cbar = plt.colorbar(im)
-    cbar.set_label('Dose en cGy')
+    cbar.set_label('Dose en Gy')
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Z en mm')
     plt.ylabel('X en mm')
@@ -79,37 +79,38 @@ def draw2DMapDoseDepth(dim1,dim2,array, cropped, dir, namefig,version):
     fig.savefig('fig/' + dir + '_DoseMapDepth' + namefig+version+'.pdf',
                 facecolor='w', edgecolor='w', format='pdf')
 
-def draw2DMapErrorTransverse(dim1,dim2,array, dir, namefig):
+def draw2DMapErrorTransverse(dim1,dim2,array, dir,maxDose):
     fig = plt.figure()
     im = plt.pcolormesh(dim1, dim2, array)
     plt.title('Erreur de dose à la profondeur du maximum')
     cbar = plt.colorbar(im)
-    cbar.set_label('Erreur en %')
+    cbar.set_label('Erreur en %'+' de '+str(maxDose)+ ' (Gy)')
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Y en mm')
     plt.ylabel('X en mm')
     plt.set_cmap(plt.get_cmap('RdYlBu_r'))
-    fig.savefig('fig/' + dir + '_ErrorMapTransverse' + namefig+'.pdf',
+    fig.savefig('fig/' + dir + '_ErrorMapTransverse' + '.pdf',
                 facecolor='w', edgecolor='w', format='pdf')
 
-def draw2DMapErrorDepth(dim1,dim2,array, cropped, dir, namefig):
+def draw2DMapErrorDepth(dim1,dim2,array, cropped, dir,maxDose):
     fig = plt.figure()
     croppedArray = crop_2D_depth(array,cropped)
     im = plt.pcolormesh(dim1, dim2, croppedArray)
     plt.title('Erreur de dose à la profondeur du maximum')
     cbar = plt.colorbar(im)
-    cbar.set_label('Erreur en %')
+    cbar.set_label('Erreur en %'+' de '+str(maxDose)+ ' (Gy)')
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Y en mm')
     plt.ylabel('X en mm')
     plt.set_cmap(plt.get_cmap('RdYlBu_r'))
-    fig.savefig('fig/' + dir + '_ErrorMapTransverse' + namefig+'.pdf',
+    fig.savefig('fig/' + dir + '_ErrorMapDepth' +'.pdf',
                 facecolor='w', edgecolor='w', format='pdf')
 
 
+
 PathDicom = "data/"
-refFile = "RS6.dcm"
-testedFile = "RS8.dcm"
+refFile = "RS8-b.dcm"
+testedFile = "RS10-a.dcm"
 # lstFilesDCM = []  # create an empty list
 for dirName, subdirList, fileList in os.walk(PathDicom):
     for d in subdirList:
@@ -121,7 +122,13 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         #        lstFilesDCM.append(os.path.join(dirName,filename))
         refDs = dicom.read_file(rFile)
         testedDs = dicom.read_file(tFile)
+        #print(refDs)
+        
         ds = refDs.pixel_array
+        doseScalingRef = refDs.DoseGridScaling
+        doseScalingTested =testedDs.DoseGridScaling
+        print(doseScalingRef)
+        print(doseScalingTested)
         ConstPixelDims = ds.shape
 
         # print(ConstPixelDims)
@@ -151,14 +158,20 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         # print(np.shape(refDs.pixel_array))
         # print(np.shape(refArray))
         # print(len(refArray[0]),len(refArray[1]),len(refArray[2]))
-        refArray[:, :, :] = refDs.pixel_array
-        testedArray[:, :, :] = testedDs.pixel_array
-        
-        errorGlobal = 100*(refArray-testedArray)/np.max(refArray)
+        refArray[:, :, :] = refDs.pixel_array#*doseScalingRef
+        testedArray[:, :, :] = testedDs.pixel_array#*doseScalingTested
+        refArray = refArray*doseScalingRef
+        BraggPeakRef = np.sum(np.sum(refArray,axis=2),axis=0)
+        print(BraggPeakRef)
+        zmax=np.argmax(BraggPeakRef)
+        testedArray = testedArray*doseScalingTested
+        maxA = np.max(refArray)
+        errorGlobal = 100*(refArray-testedArray)/maxA
+        print(maxA)
         errorGlobal[refArray == 0.] = np.nan # where it's 0 data do not considered for statistics 
         computeArrayRate(errorGlobal, ConstPixelDims, d)
-        print(np.size(np.where(refArray == 0.))/3.)
-        print(len(refArray))
+        #print(np.size(np.where(refArray == 0.))/3.)
+        #print(len(refArray))
         lrefArray = crop_3D(refArray, cropped, cropped)
         ltestedArray = crop_3D(testedArray, cropped, cropped)
         lerrorGlobal = crop_3D(errorGlobal, cropped, cropped)
@@ -167,10 +180,12 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         ref = 'RS8'
         tested = 'RS10'
         print(MaxIndices)
-        draw2DMapDoseTransverse(ly, lx, lrefArray[:, MaxIndices[2][0], :],d, 'AtMaxDepth',ref)
-        draw2DMapDoseTransverse(ly, lx, ltestedArray[:, MaxIndices[2][0], :],d, 'AtMaxDepth',tested)
-        draw2DMapErrorTransverse(ly, lx, lerrorGlobal[:, MaxIndices[2][0], :],d, 'AtMaxDepth')
+        if MaxIndices[0][0] != 85:
+            MaxIndices[0][0] =85
+        draw2DMapDoseTransverse(ly, lx, lrefArray[:, zmax, :],d, 'AtMaxDepth',ref)
+        draw2DMapDoseTransverse(ly, lx, ltestedArray[:, zmax, :],d, 'AtMaxDepth',tested)
+        draw2DMapErrorTransverse(ly, lx, lerrorGlobal[:, zmax, :],d,np.round(maxA,2))
 
         draw2DMapDoseDepth(lz, lx, refArray[:, :, MaxIndices[0][0]], cropped, d, 'AtMaxDepth',ref)
         draw2DMapDoseDepth(lz, lx, testedArray[:, :, MaxIndices[0][0]], cropped, d, 'AtMaxDepth',tested)
-        draw2DMapErrorDepth(lz, lx, errorGlobal[:,:,MaxIndices[0][0]],cropped,d, 'AtMaxDepth')
+        draw2DMapErrorDepth(lz, lx, errorGlobal[:,:,MaxIndices[0][0]],cropped,d,np.round(maxA,2))
