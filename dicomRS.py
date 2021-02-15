@@ -21,7 +21,7 @@ def computeArrayRate(errG, dims, dir):
     low = min(rateGlobal)
     high = max(rateGlobal)
     plt.ylim([math.ceil(low-0.5*(high-low)), math.ceil(high+1)])
-    plt.ylim([0,102])
+    plt.ylim([95,101])
 
     plt.bar(list(criteria), list(rateGlobal), align='center',
             width=0.3, color='yellow', edgecolor='red')
@@ -72,6 +72,8 @@ def draw2DMapDoseDepth(dim1,dim2,array, cropped, dir, namefig,version):
     plt.title('Dose en fonctionde la profondeur: '+version)
     cbar = plt.colorbar(im)
     cbar.set_label('Dose en Gy')
+
+   
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Z en mm')
     plt.ylabel('X en mm')
@@ -84,6 +86,7 @@ def draw2DMapErrorTransverse(dim1,dim2,array, dir,maxDose):
     im = plt.pcolormesh(dim1, dim2, array)
     plt.title('Erreur de dose à la profondeur du maximum')
     cbar = plt.colorbar(im)
+    plt.clim(-3, 3)
     cbar.set_label('Erreur en %'+' de '+str(maxDose)+ ' (Gy)')
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Y en mm')
@@ -98,6 +101,7 @@ def draw2DMapErrorDepth(dim1,dim2,array, cropped, dir,maxDose):
     im = plt.pcolormesh(dim1, dim2, croppedArray)
     plt.title('Erreur de dose à la profondeur du maximum')
     cbar = plt.colorbar(im)
+    plt.clim(-3, 3)
     cbar.set_label('Erreur en %'+' de '+str(maxDose)+ ' (Gy)')
     #plt.axes().set_aspect('equal', 'datalim')
     plt.xlabel('Y en mm')
@@ -109,6 +113,11 @@ def draw2DMapErrorDepth(dim1,dim2,array, cropped, dir,maxDose):
 
 
 PathDicom = "data/"
+#subpath = "MC/CGTR2019/"
+#subpath = "MC/CGTR2017/"
+#subpath = "PB/CGTR2019/"
+subpath = "PB/CGTR2017/"
+PathDicom = PathDicom +subpath
 refFile = "RS8-b.dcm"
 testedFile = "RS10-a.dcm"
 # lstFilesDCM = []  # create an empty list
@@ -127,8 +136,8 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         ds = refDs.pixel_array
         doseScalingRef = refDs.DoseGridScaling
         doseScalingTested =testedDs.DoseGridScaling
-        print(doseScalingRef)
-        print(doseScalingTested)
+        #print(doseScalingRef)
+        #print(doseScalingTested)
         ConstPixelDims = ds.shape
 
         # print(ConstPixelDims)
@@ -162,13 +171,14 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         testedArray[:, :, :] = testedDs.pixel_array#*doseScalingTested
         refArray = refArray*doseScalingRef
         BraggPeakRef = np.sum(np.sum(refArray,axis=2),axis=0)
-        print(BraggPeakRef)
+        #print(BraggPeakRef)
         zmax=np.argmax(BraggPeakRef)
         testedArray = testedArray*doseScalingTested
         maxA = np.max(refArray)
         errorGlobal = 100*(refArray-testedArray)/maxA
-        print(maxA)
+        #print(maxA)
         errorGlobal[refArray == 0.] = np.nan # where it's 0 data do not considered for statistics 
+        d=subpath+d
         computeArrayRate(errorGlobal, ConstPixelDims, d)
         #print(np.size(np.where(refArray == 0.))/3.)
         #print(len(refArray))
@@ -179,9 +189,10 @@ for dirName, subdirList, fileList in os.walk(PathDicom):
         MaxIndices = np.where(refArray == np.amax(refArray))
         ref = 'RS8'
         tested = 'RS10'
-        print(MaxIndices)
+        #print(MaxIndices)
         if MaxIndices[0][0] != 85:
             MaxIndices[0][0] =85
+        
         draw2DMapDoseTransverse(ly, lx, lrefArray[:, zmax, :],d, 'AtMaxDepth',ref)
         draw2DMapDoseTransverse(ly, lx, ltestedArray[:, zmax, :],d, 'AtMaxDepth',tested)
         draw2DMapErrorTransverse(ly, lx, lerrorGlobal[:, zmax, :],d,np.round(maxA,2))
